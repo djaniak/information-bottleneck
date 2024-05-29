@@ -1,0 +1,21 @@
+stages:
+  compute_entropies:
+    matrix:
+      model: [
+        "EleutherAI_pythia-14m",
+        "EleutherAI_pythia-70m",
+        "EleutherAI_pythia-160m",
+        "EleutherAI_pythia-410m",
+        "EleutherAI_pythia-1b",
+      ]
+      dataset: [ "wikitext" ]
+      compression: [ "none", "quantization_4bit", "quantization_8bit" ]
+    cmd: >-
+      PYTHONPATH=. python experiments/scripts/compute_entropies.py 
+      --model-name ${item.model} --dataset ${item.dataset} --compression ${item.compression} 
+      --output-path data/entropies/${item.model}-${item.dataset}-${item.compression}.json
+    deps:
+      - experiments/scripts/compute_entropies.py
+    outs:
+      - data/entropies/${item.model}-${item.dataset}-${item.compression}.json:
+          push: false
