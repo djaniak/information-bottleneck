@@ -19,3 +19,22 @@ stages:
     outs:
       - data/entropies/${item.model}-${item.dataset}-${item.compression}.json:
           push: false
+  evaluate_lms:
+    matrix:
+      model: [
+        "EleutherAI_pythia-14m",
+        "EleutherAI_pythia-70m",
+        "EleutherAI_pythia-160m",
+        "EleutherAI_pythia-410m",
+        "EleutherAI_pythia-1b",
+      ]
+      task: [ "hellaswag" ]
+      compression: [ "none", "quantization_4bit", "quantization_8bit" ]
+    cmd: >-
+      PYTHONPATH=. python experiments/scripts/evaluate_llm.py 
+      --model-name ${item.model} --task ${item.task} --compression ${item.compression} 
+      --output-path data/lm_eval/${item.model}-${item.task}-${item.compression}.json
+    deps:
+      - experiments/scripts/evaluate_llm.py
+    outs:
+      - data/lm_eval/${item.model}-${item.task}-${item.compression}.json
