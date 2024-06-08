@@ -23,23 +23,28 @@ def normalize(R):
         mean = R.mean(dim=0)
         R = R - mean
         norms = torch.norm(R, p=2, dim=1, keepdim=True)
-        R = R/norms
+        R = R / norms
     return R
 
 
-def compute_entropies_for_each_sentence(model: torch.nn.Module, dataloader: DataLoader, device: torch.device, alpha: float = 1) -> List[float]:
+def compute_entropies_for_each_sentence(
+    model: torch.nn.Module,
+    dataloader: DataLoader,
+    device: torch.device,
+    alpha: float = 1,
+) -> List[float]:
     output_dict = {
-        'unnormalized_entropy': [],
-        'perplexity': [],
-        'lengths': [],
-        'dimensions': [],
+        "unnormalized_entropy": [],
+        "perplexity": [],
+        "lengths": [],
+        "dimensions": [],
     }
-    
+
     with torch.no_grad():
         for batch in tqdm.tqdm(dataloader):
             batch = {k: v.to(device) for k, v in batch.items()}
             batch["labels"] = batch["input_ids"].clone()
-            
+
             outputs = model(**batch)
             hidden_states = outputs.hidden_states
             loss = outputs.loss
@@ -52,14 +57,13 @@ def compute_entropies_for_each_sentence(model: torch.nn.Module, dataloader: Data
             if N > D:
                 cov = last_hidden_state.T @ last_hidden_state
             else:
-                cov = (last_hidden_state @ last_hidden_state.T)
+                cov = last_hidden_state @ last_hidden_state.T
             cov /= torch.trace(cov)
-           
-            entropy = itl.matrixAlphaEntropy(cov.float(), alpha=alpha)
-            output_dict['unnormalized_entropy'].append(entropy.item())
-            output_dict['perplexity'].append(math.exp(loss.item()))
-            output_dict['lengths'].append(N)
-            output_dict['dimensions'].append(D)
 
+            entropy = itl.matrixAlphaEntropy(cov.float(), alpha=alpha)
+            output_dict["unnormalized_entropy"].append(entropy.item())
+            output_dict["perplexity"].append(math.exp(loss.item()))
+            output_dict["lengths"].append(N)
+            output_dict["dimensions"].append(D)
 
     return output_dict

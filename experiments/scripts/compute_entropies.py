@@ -5,7 +5,12 @@ from typing import Optional
 
 import torch
 import typer
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, QuantoConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    QuantoConfig,
+)
 
 from src.data import get_dataloader
 from src.matrix_entropy import compute_entropies_for_each_sentence
@@ -28,13 +33,21 @@ def main(
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model_name = model_name.replace("_", "/")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    
+
     quantization_config = get_quantization_config(quantization)
     model = AutoModelForCausalLM.from_pretrained(
-        model_name, output_hidden_states=True, device_map="auto", quantization_config=quantization_config, torch_dtype=torch.bfloat16
+        model_name,
+        output_hidden_states=True,
+        device_map="auto",
+        quantization_config=quantization_config,
+        torch_dtype=torch.bfloat16,
     )
-    dataloader = get_dataloader(tokenizer, dataset, split="train", num_samples=num_samples)
-    entropies = compute_entropies_for_each_sentence(model, dataloader, alpha=1, device=device)
+    dataloader = get_dataloader(
+        tokenizer, dataset, split="train", num_samples=num_samples
+    )
+    entropies = compute_entropies_for_each_sentence(
+        model, dataloader, alpha=1, device=device
+    )
 
     with open(output_path, "w") as f:
         json.dump(entropies, f)
@@ -53,7 +66,7 @@ def get_quantization_config(quantization: str):
         elif bits == "int4":
             return BitsAndBytesConfig(
                 load_in_4bit=True,
-                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_compute_dtype=torch.bfloat16,
                 bnb_4bit_use_double_quant=True,
             )
     else:
