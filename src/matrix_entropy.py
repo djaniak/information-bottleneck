@@ -28,29 +28,25 @@ def normalize(R):
 
 
 def compute_entropies_for_each_sentence(model: torch.nn.Module, dataloader: DataLoader, device: torch.device, alpha: float = 1) -> List[float]:
-    """
-    Computes the entropies for each sentence in the given dataloader using the provided model.
-
-    Args:
-        model (torch.nn.Module): The model used for computing the entropies.
-        dataloader (DataLoader): The dataloader containing the sentences.
-        device (torch.device): The device to perform the computations on.
-        alpha (float, optional): The alpha parameter for the entropy calculation. Defaults to 1.
-
-    Returns:
-        List[float]: A list of entropies for each sentence in the dataloader.
-    """
-
-    entropy_list = []
+    output_dict = {
+        'unnormalized_entropy': [],
+        'perplexity': [],
+        'lengths': [],
+        'dimensions': [],
+    }
     
     with torch.no_grad():
         for batch in tqdm.tqdm(dataloader):
             batch = {k: v.to(device) for k, v in batch.items()}
+            batch["labels"] = batch["input_ids"].clone()
+            
             outputs = model(**batch)
             hidden_states = outputs.hidden_states
+            loss = outputs.loss
             N, D = hidden_states[0].shape[1:]
 
-            last_hidden_state = normalize(hidden_states[-1].squeeze()).float()
+            last_hidden_state = normalize(outputs.hidden_states[-1].squeeze())
+            # (batch_size, num_words, embedding_dim)
 
             # be efficient here, XX^T and X^TX have the same eigenvalues and thus the same entropy
             if N > D:
@@ -58,11 +54,12 @@ def compute_entropies_for_each_sentence(model: torch.nn.Module, dataloader: Data
             else:
                 cov = (last_hidden_state @ last_hidden_state.T)
             cov /= torch.trace(cov)
+           
+            entropy = itl.matrixAlphaEntropy(cov.float(), alpha=alpha)
+            output_dict['unnormalized_entropy'].append(entropy.item())
+            output_dict['perplexity'].append(math.exp(loss.item()))
+            output_dict['lengths'].append(N)
+            output_dict['dimensions'].append(D)
 
-            entropy = itl.matrixAlphaEntropy(cov, alpha=alpha)
 
-            # the matrix LLM paper [5] does this in equation 5, not sure it is strictly necessary
-            entropy /= math.log(D) 
-            entropy_list.append(entropy.item())
-
-    return entropy_list
+    return output_dict

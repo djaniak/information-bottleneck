@@ -7,18 +7,19 @@ stages:
         "EleutherAI_pythia-160m",
         "EleutherAI_pythia-410m",
         "EleutherAI_pythia-1b",
+        "EleutherAI_pythia-1.4b",
+        "EleutherAI_pythia-2.8b",
       ]
       dataset: [ "wikitext" ]
-      compression: [ "none", "quantization_4bit", "quantization_8bit" ]
+      quantization: [ "none-float16", "bnb-int4", "bnb-int8", "quanto-int2", "quanto-int4", "quanto-int8" ]
     cmd: >-
       PYTHONPATH=. python experiments/scripts/compute_entropies.py 
-      --model-name ${item.model} --dataset ${item.dataset} --compression ${item.compression} 
-      --output-path data/entropies/${item.model}-${item.dataset}-${item.compression}.json
-    deps:
-      - experiments/scripts/compute_entropies.py
+      --model-name ${item.model} --dataset ${item.dataset} --quantization ${item.quantization} 
+      --output-path data/entropies/${item.dataset}/${item.model}/${item.quantization}.json
     outs:
-      - data/entropies/${item.model}-${item.dataset}-${item.compression}.json:
+      - data/entropies/${item.dataset}/${item.model}/${item.quantization}.json:
           push: false
+
   evaluate_lms:
     matrix:
       model: [
@@ -27,14 +28,15 @@ stages:
         "EleutherAI_pythia-160m",
         "EleutherAI_pythia-410m",
         "EleutherAI_pythia-1b",
+        "EleutherAI_pythia-2.8b",
       ]
       task: [ "hellaswag" ]
-      compression: [ "none", "quantization_4bit", "quantization_8bit" ]
+      quantization: [ "none-float16", "bnb-int4", "bnb-int8", "quanto-int2", "quanto-int4", "quanto-int8" ]
     cmd: >-
       PYTHONPATH=. python experiments/scripts/evaluate_llm.py 
-      --model-name ${item.model} --task ${item.task} --compression ${item.compression} 
-      --output-path data/lm_eval/${item.model}-${item.task}-${item.compression}.json
+      --model-name ${item.model} --task ${item.task} --quantization ${item.quantization} 
+      --output-path data/lm_eval/${item.model}-${item.task}-${item.quantization}.json
     deps:
       - experiments/scripts/evaluate_llm.py
     outs:
-      - data/lm_eval/${item.model}-${item.task}-${item.compression}.json
+      - data/lm_eval/${item.task}/${item.model}/${item.quantization}.json
