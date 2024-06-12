@@ -30,12 +30,12 @@ stages:
         "EleutherAI_pythia-1b",
         "EleutherAI_pythia-2.8b",
       ]
-      task: [ "hellaswag" ]
-      quantization: [ "none-float16", "bnb-int4", "bnb-int8", "quanto-int2", "quanto-int4", "quanto-int8" ]
+      task: [ "openbookqa", "winogrande", "piqa", "hellaswag" ]
+      quantization: [ "float16", "int4", "int8" ]
     cmd: >-
       PYTHONPATH=. python experiments/scripts/evaluate_llm.py 
       --model-name ${item.model} --task ${item.task} --quantization ${item.quantization} 
-      --output-path data/lm_eval/${item.model}-${item.task}-${item.quantization}.json
+      --output-path data/lm_eval/${item.task}/${item.model}/${item.quantization}.json
     deps:
       - experiments/scripts/evaluate_llm.py
     outs:
