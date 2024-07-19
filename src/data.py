@@ -4,8 +4,6 @@ import torch
 from datasets import load_dataset
 from torch.utils.data import DataLoader
 
-ALLOWED_DATASETS = ["wikitext", "dolly15k"]
-
 
 def get_dataloader(
     tokenizer,
@@ -36,20 +34,34 @@ def get_dataloader(
             and example[target_column].strip().endswith("=")
         )
 
-    assert dataset_name in ALLOWED_DATASETS
-    assert split in ["train", "validation"]
+    assert split in ["train", "validation", "test"]
     assert context_length_ratio <= 1
 
     if dataset_name == "wikitext":
         target_column = "text"
         remove_columns = ["text"]
         dataset = load_dataset("wikitext", "wikitext-103-v1")[split]
-        num_samples = min(num_samples, len(dataset))
-        dataset = dataset.select(range(num_samples))
     elif dataset_name == "dolly15k":
         target_column = "context"
         remove_columns = ["instruction", "response", "category", "context"]
         dataset = load_dataset("databricks/databricks-dolly-15k")[split]
+    elif dataset_name == "imdb":
+        target_column = "text"
+        remove_columns = ["text", "label"]
+        dataset = load_dataset("imdb")[split]
+    elif dataset_name == "openwebtext":
+        assert split == "train"
+        target_column = "text"
+        remove_columns = ["text"]
+        dataset = load_dataset("stas/openwebtext-10k")[split]
+    elif dataset_name == "hh-rlhf":
+        target_column = "chosen"
+        remove_columns = ["chosen", "rejected"]
+        dataset = load_dataset("Anthropic/hh-rlhf")[split]
+    else:
+        raise ValueError("Dataset not recognized!")
+    
+    if num_samples is not None:
         num_samples = min(num_samples, len(dataset))
         dataset = dataset.select(range(num_samples))
 

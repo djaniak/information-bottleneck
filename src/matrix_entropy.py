@@ -58,9 +58,12 @@ def compute_entropies_for_each_sentence(
                 else:
                     cov = hidden_state @ hidden_state.T
                 cov /= torch.trace(cov)
-                entropy = itl.matrixAlphaEntropy(cov.float(), alpha=alpha)
+                try:
+                    entropy = itl.matrixAlphaEntropy(cov.float(), alpha=alpha)
+                except Exception as e:
+                    print(f"Error: {e}")
+                    entropy = torch.tensor(math.nan)
                 output_dict["unnormalized_entropy"][f"hidden_state_{i}"].append(entropy.item())
-            output_dict["perplexity"].append(math.exp(loss.item()))
             output_dict["num_words"].append(N)
             output_dict["embedding_dim"].append(D)
 

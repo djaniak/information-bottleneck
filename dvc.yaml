@@ -1,34 +1,70 @@
 stages:
-  compute_entropies:
+
+  compute_opt_entropy_ppl_gptq:
     matrix:
-      model: [
-        "EleutherAI_pythia-14m",
-        "EleutherAI_pythia-70m",
-        "EleutherAI_pythia-160m",
-        "EleutherAI_pythia-410m",
-        "EleutherAI_pythia-1b",
-        "EleutherAI_pythia-1.4b",
-        "EleutherAI_pythia-2.8b",
+      pretrained_model_dir: [
+        "facebook_opt-1.3b",
+        "facebook_opt-2.7b",
+        "facebook_opt-6.7b",
+        "facebook_opt-13b",
       ]
-      dataset: [ "wikitext" ]
-      quantization: [ "none-float16", "bnb-int4", "bnb-int8", "quanto-int2", "quanto-int4", "quanto-int8" ]
+      bits: [ 2, 3, 4, 8, 16 ]
     cmd: >-
-      PYTHONPATH=. python experiments/scripts/compute_entropies.py 
-      --model-name ${item.model} --dataset ${item.dataset} --quantization ${item.quantization} 
-      --output-path data/entropies/${item.dataset}/${item.model}/${item.quantization}.json
+      PYTHONPATH=. python experiments/scripts/compute_opt_entropy_ppl_gptq.py
+      --pretrained-model-dir ${item.pretrained_model_dir} --bits ${item.bits} --no-quantize
+      --output-path data/entropies/gptq-wikitext2/${item.pretrained_model_dir}-${item.bits}bit.json
     outs:
-      - data/entropies/${item.dataset}/${item.model}/${item.quantization}.json:
+      - data/entropies/gptq-wikitext2/${item.pretrained_model_dir}-${item.bits}bit.json:
           push: false
+
+  # compute_entropies:
+  #   matrix:
+  #     model: [
+  #       "EleutherAI_pythia-1.4b",
+  #       "EleutherAI_pythia-2.8b",
+  #       "EleutherAI_pythia-6.9b",
+  #       "EleutherAI_pythia-12b",
+  #       "facebook_opt-1.3b",
+  #       "facebook_opt-2.7b",
+  #       "facebook_opt-6.7b",
+  #       "facebook_opt-13b",
+  #       "huggyllama_llama-7b",
+  #       "huggyllama_llama-13b",
+  #     ]
+  #     dataset: [ "wikitext" ]
+  #     quantization: [ "none-float16", "gptq-2", "gptq-3", "gptq-4", "gptq-8",  "bnb-int4", "bnb-int8" ]
+  #   cmd: >-
+  #     PYTHONPATH=. python experiments/scripts/compute_entropies.py 
+  #     --model-name ${item.model} --dataset ${item.dataset} --quantization ${item.quantization} 
+  #     --output-path data/entropies/${item.dataset}/${item.model}/${item.quantization}.json
+  #   outs:
+  #     - data/entropies/${item.dataset}/${item.model}/${item.quantization}.json:
+  #         push: false
+
+  # compute_perplexities_gptq:
+  #   matrix:
+  #     pretrained_model_dir: [
+  #       "facebook_opt-1.3b",
+  #       "facebook_opt-2.7b",
+  #       "facebook_opt-6.7b",
+  #       "facebook_opt-13b",
+  #     ]
+  #     bits: [ 2, 3, 4, 8, 16 ]
+  #   cmd: >-
+  #     PYTHONPATH=. python experiments/scripts/compute_perplexities_gptq.py
+  #     --pretrained-model-dir ${item.pretrained_model_dir} --bits ${item.bits}
+  #     --output-path data/perplexities/gptq-wikitext2/${item.pretrained_model_dir}-${item.bits}bit.json
+  #   outs:
+  #     - data/perplexities/gptq-wikitext2/${item.pretrained_model_dir}-${item.bits}bit.json:
+  #         push: false
 
   evaluate_lms:
     matrix:
       model: [
-        "EleutherAI_pythia-14m",
-        "EleutherAI_pythia-70m",
-        "EleutherAI_pythia-160m",
-        "EleutherAI_pythia-410m",
-        "EleutherAI_pythia-1b",
-        "EleutherAI_pythia-2.8b",
+        "facebook_opt-1.3b",
+        "facebook_opt-2.7b",
+        "facebook_opt-6.7b",
+        "facebook_opt-13b",
       ]
       task: [ "openbookqa", "winogrande", "piqa", "hellaswag" ]
       quantization: [ "float16", "int4", "int8" ]
@@ -36,7 +72,45 @@ stages:
       PYTHONPATH=. python experiments/scripts/evaluate_llm.py 
       --model-name ${item.model} --task ${item.task} --quantization ${item.quantization} 
       --output-path data/lm_eval/${item.task}/${item.model}/${item.quantization}.json
-    deps:
-      - experiments/scripts/evaluate_llm.py
+    # deps:
+    #   - experiments/scripts/evaluate_llm.py
     outs:
       - data/lm_eval/${item.task}/${item.model}/${item.quantization}.json
+
+  run_sft:
+    matrix:
+      model: [
+        "facebook_opt-125m",
+        "facebook_opt-350m",
+        "facebook_opt-1.3b",
+      ]
+      dataset: [ "imdb" ] #, "CodeAlpaca-20k" ]
+      quantization: [ "none-float16", "bnb-int4", "bnb-int8" ]
+    cmd: >-
+      PYTHONPATH=. python experiments/scripts/run_sft.py 
+      --model-name ${item.model} --dataset-name ${item.dataset} --quantization ${item.quantization}
+      --output-dir data/sft/${item.dataset}/${item.model}-${item.quantization}-lora
+    # deps:
+    #   - experiments/scripts/run_sft.py
+    outs:
+      - data/sft/${item.dataset}/${item.model}-${item.quantization}-lora
+
+  compute_entropies_for_sft:
+    matrix:
+      model: [
+        "facebook_opt-125m",
+        "facebook_opt-350m",
+        "facebook_opt-1.3b",
+      ]
+      dataset: [ "imdb" ] #, "CodeAlpaca-20k" ]
+      quantization: [ "none-float16", "bnb-int4", "bnb-int8" ]
+    cmd: >-
+      PYTHONPATH=. python experiments/scripts/compute_entropies_for_sft.py 
+      --model-checkpoint-dir data/sft/${item.dataset}/${item.model}-${item.quantization}-lora 
+      --output-dir data/entropies_sft/${item.dataset}/${item.model}-${item.quantization}-lora
+      --dataset ${item.dataset} 
+      --num-samples 10000
+    # deps:
+    #   - experiments/scripts/compute_entropies_for_sft.py
+    outs:
+      - data/entropies_sft/${item.dataset}/${item.model}-${item.quantization}-lora

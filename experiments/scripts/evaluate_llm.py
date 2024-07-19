@@ -11,7 +11,7 @@ def main(
     task: str = typer.Option(...),
     quantization: str = typer.Option(...),
     output_path: Optional[Path] = typer.Option(None),
-    batch_size: int = typer.Option(256),
+    batch_size: int = typer.Option(4),
 ):
     if output_path is None:
         output_path = Path(f"data/lm_eval/{model_name}/{quantization}/{task}.json")
