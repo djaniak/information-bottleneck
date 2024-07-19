@@ -69,6 +69,7 @@ def normalize(R):
 
 @torch.no_grad()
 def opt_eval(model, testenc, dev, seqlen=2048):
+    """From  https://github.com/IST-DASLab/gptq/blob/main/opt.py."""
     print("Evaluating ...")
 
     testenc = testenc.input_ids
