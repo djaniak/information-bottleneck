@@ -9,12 +9,13 @@ stages:
         "facebook_opt-13b",
       ]
       bits: [ 2, 3, 4, 8, 16 ]
+      dataset: [ "wikitext2" ]
     cmd: >-
       PYTHONPATH=. python experiments/scripts/compute_opt_entropy_ppl_gptq.py
-      --pretrained-model-dir ${item.pretrained_model_dir} --bits ${item.bits} --no-quantize
-      --output-path data/entropies/gptq-wikitext2/${item.pretrained_model_dir}-${item.bits}bit.json
+      --pretrained-model-dir ${item.pretrained_model_dir} --bits ${item.bits} --no-quantize --dataset ${item.dataset}
+      --output-path data/entropies/gptq-${item.dataset}/${item.pretrained_model_dir}-${item.bits}bit.json
     outs:
-      - data/entropies/gptq-wikitext2/${item.pretrained_model_dir}-${item.bits}bit.json:
+      - data/entropies/gptq-${item.dataset}/${item.pretrained_model_dir}-${item.bits}bit.json:
           push: false
 
   evaluate_lms:
@@ -33,3 +34,33 @@ stages:
       --output-path data/lm_eval/${item.task}/${item.model}/${item.quantization}.json
     outs:
       - data/lm_eval/${item.task}/${item.model}/${item.quantization}.json
+
+  compute_log_probs_calibration_mmlu:
+    matrix:
+      model_id: [
+        "meta-llama_Llama-2-7b-hf", 
+        "meta-llama_Llama-2-7b-chat-hf"
+      ]
+      dataset_id: [ 
+        "cais_mmlu-high_school_biology",
+        'cais_mmlu-high_school_chemistry', 
+        'cais_mmlu-high_school_computer_science', 
+        'cais_mmlu-high_school_european_history', 
+        'cais_mmlu-high_school_geography', 
+        'cais_mmlu-high_school_government_and_politics', 
+        'cais_mmlu-high_school_macroeconomics', 
+        'cais_mmlu-high_school_mathematics', 
+        'cais_mmlu-high_school_microeconomics', 
+        'cais_mmlu-high_school_physics', 
+        'cais_mmlu-high_school_psychology', 
+        'cais_mmlu-high_school_statistics', 
+        'cais_mmlu-high_school_us_history', 
+        'cais_mmlu-high_school_world_history' 
+        ]
+      shuffle: [ 1, 0 ]
+    cmd: >-
+      PYTHONPATH=. python experiments/scripts/compute_log_probs_calibration.py
+      --model-id ${item.model_id} --dataset-id ${item.dataset_id} --shuffle-answers ${item.shuffle}
+      --output-path data/calibration_new/${item.model_id}_${item.dataset_id}_shuffled_${item.shuffle}.json
+    outs:
+      - data/calibration_new/${item.model_id}_${item.dataset_id}_shuffled_${item.shuffle}.json

@@ -5,6 +5,9 @@ from typing import Optional
 import repitl.matrix_itl as itl
 
 from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
+from transformers import AutoTokenizer
+from datasets import load_dataset
+import random
 
 import numpy as np
 import torch
@@ -17,12 +20,19 @@ logger = logging.getLogger(__name__)
 
 
 def get_wikitext2(nsamples, seed, seqlen, model):
-    from datasets import load_dataset
-
     traindata = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
     testdata = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
 
-    from transformers import AutoTokenizer
+    def is_not_wikipedia_heading(example):
+        return not (
+            example["text"].strip().startswith("=")
+            and example["text"].strip().endswith("=")
+        )
+    traindata = traindata.filter(is_not_wikipedia_heading)
+    testdata = testdata.filter(is_not_wikipedia_heading)
+
+    traindata = traindata.filter(lambda x: len(x["text"]) > 10)
+    testdata = testdata.filter(lambda x: len(x["text"]) > 10)
 
     try:
         tokenizer = AutoTokenizer.from_pretrained(model, use_fast=False)
@@ -31,19 +41,14 @@ def get_wikitext2(nsamples, seed, seqlen, model):
     trainenc = tokenizer("\n\n".join(traindata["text"]), return_tensors="pt")
     testenc = tokenizer("\n\n".join(testdata["text"]), return_tensors="pt")
 
-    import random
-
-    random.seed(seed)
-    np.random.seed(0)
-    torch.random.manual_seed(0)
-
     traindataset = []
     for _ in range(nsamples):
         i = random.randint(0, trainenc.input_ids.shape[1] - seqlen - 1)
         j = i + seqlen
         inp = trainenc.input_ids[:, i:j]
         attention_mask = torch.ones_like(inp)
-        traindataset.append({"input_ids": inp, "attention_mask": attention_mask})
+        if len(inp.squeeze()) >= 5:
+            traindataset.append({"input_ids": inp, "attention_mask": attention_mask})
     return traindataset, testenc
 
 
@@ -143,6 +148,8 @@ def opt_eval(model, testenc, dev, seqlen=2048):
     testenc = testenc.to(dev)
     nlls = []
     ents = []
+    ns = []
+    ds = []
 
     for i in range(nsamples):
         hidden_states = inps[i].unsqueeze(0)
@@ -170,14 +177,16 @@ def opt_eval(model, testenc, dev, seqlen=2048):
         cov /= torch.trace(cov)
         entropy = itl.matrixAlphaEntropy(cov.float(), alpha=1)
         ents.append(entropy)
+        ns.append(N)
+        ds.append(D)
 
     ppl = torch.exp(torch.stack(nlls).sum() / (nsamples * seqlen))
     print(ppl.item())
 
     ents = torch.stack(ents).cpu()
-    logD_normalized_entropy = ents / np.log(seqlen)
-    logN_normalized_entropy = ents / np.log(nsamples)
-    logNlogD_normalized_entropy = ents / (np.log(nsamples) * np.log(seqlen))
+    logD_normalized_entropy = ents / np.log(ds)
+    logN_normalized_entropy = ents / np.log(ns)
+    NlogD_normalized_entropy = ents / (np.array(ns) * np.log(ds))
 
     model.config.use_cache = use_cache
 
@@ -186,25 +195,37 @@ def opt_eval(model, testenc, dev, seqlen=2048):
         "entropy": ents.mean().item(),
         "logD_normalized_entropy": logD_normalized_entropy.mean().item(),
         "logN_normalized_entropy": logN_normalized_entropy.mean().item(),
-        "logNlogD_normalized_entropy": logNlogD_normalized_entropy.mean().item(),
+        "NlogD_normalized_entropy": NlogD_normalized_entropy.mean().item(),
     }
 
 
 def main(
-    pretrained_model_dir: str = typer.Option(...),
-    bits: int = typer.Option(...),
+    pretrained_model_dir: str = typer.Option("facebook_opt-1.3b"),
+    bits: int = typer.Option(16),
     output_path: Optional[Path] = typer.Option(None),
-    quantize: bool = typer.Option(True)
+    quantize: bool = typer.Option(False),
+    dataset: str = typer.Option("wikitext2"),
+    nsamples: int = typer.Option(1024),
+    seqlen: int = typer.Option(2048),
+    seed: int = typer.Option(0),
 ):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+
     print(quantize)
+
     if output_path is None:
-        output_path = Path(f"data/perplexities/gptq-wikitext2/{pretrained_model_dir}-{bits}bit.json")
+        output_path = Path(f"data/perplexities/gptq-{dataset}/{pretrained_model_dir}-{bits}bit.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    quantized_model_dir = f"data/models/quantized/{pretrained_model_dir}-gptq-{bits}bit-128g-wikitext2"
+    quantized_model_dir = f"data/models/quantized/{pretrained_model_dir}-gptq-{bits}bit-128g-{dataset}"
     pretrained_model_dir = pretrained_model_dir.replace("_", "/")
 
-    traindataset, testenc = get_wikitext2(128, 0, 2048, pretrained_model_dir)
+    if dataset == "wikitext2":
+        traindataset, testenc = get_wikitext2(nsamples, seed, seqlen, pretrained_model_dir)
+    else:
+        raise ValueError("Dataset not recognized!")
     
     if bits < 16:
         quantize_config = BaseQuantizeConfig(
@@ -232,7 +253,7 @@ def main(
         eval_res = opt_eval(model, testenc, "cuda:0")
     print("eval_res", eval_res)
 
-    info = {"model": pretrained_model_dir, "quantization": "gptq", "bits": bits, "dataset": "wikitext2"}
+    info = {"model": pretrained_model_dir, "quantization": "gptq", "bits": bits, "dataset": dataset}
     out = info | eval_res
     print("out", out)
     with open(output_path, "w") as f:
